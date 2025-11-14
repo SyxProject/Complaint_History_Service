@@ -9,6 +9,20 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
 const QUEUE = 'status-queque'
 
+// Traducción de estados
+function traducirEstado(estado) {
+  switch (estado) {
+    case 'OPEN':
+      return 'Abierta'
+    case 'CLOSED':
+      return 'Cerrada'
+    case 'UNDER_REVIEW':
+      return 'En revisión'
+    default:
+      return estado
+  }
+}
+
 // 1. Consumidor de RabbitMQ
 async function startConsumer() {
   const conn = await amqp.connect(process.env.RABBITMQ_URL)
@@ -18,10 +32,12 @@ async function startConsumer() {
   channel.consume(QUEUE, async (msg) => {
     if (msg !== null) {
       const event = JSON.parse(msg.content.toString())
-      // Guarda el evento en la base de datos
+      // Traduce los estados antes de guardar
+      const prevStateEs = traducirEstado(event.prevState)
+      const newStateEs = traducirEstado(event.newState)
       await pool.query(
         'INSERT INTO complaint_events (complaint_id, prev_state, new_state, timestamp) VALUES ($1, $2, $3, $4)',
-        [event.complaintId, event.prevState, event.newState, event.timestamp]
+        [event.complaintId, prevStateEs, newStateEs, event.timestamp]
       )
       channel.ack(msg) // Borra el mensaje de la cola
       console.log('Evento guardado:', event)
