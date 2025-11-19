@@ -32,12 +32,11 @@ async function startConsumer() {
   channel.consume(QUEUE, async (msg) => {
     if (msg !== null) {
       const event = JSON.parse(msg.content.toString())
-      // Traduce los estados antes de guardar
       const prevStateEs = traducirEstado(event.prevState)
       const newStateEs = traducirEstado(event.newState)
       await pool.query(
-        'INSERT INTO complaint_events (complaint_id, prev_state, new_state, timestamp) VALUES ($1, $2, $3, $4)',
-        [event.complaintId, prevStateEs, newStateEs, event.timestamp]
+        'INSERT INTO complaint_events (complaint_id, description, prev_state, new_state, change_date) VALUES ($1, $2, $3, $4, $5)',
+        [event.complaintId, event.description, prevStateEs, newStateEs, event.change_date]
       )
       channel.ack(msg) // Borra el mensaje de la cola
       console.log('Evento guardado:', event)
