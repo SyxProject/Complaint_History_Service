@@ -29,19 +29,19 @@ async function startConsumer() {
   const channel = await conn.createChannel()
   await channel.assertQueue(QUEUE, { durable: true })
 
+  // Procesa mensajes iniciales
+  await procesarMensajesIniciales(channel)
+
+  // Consume nuevos mensajes sin borrarlos
   channel.consume(QUEUE, async (msg) => {
     if (msg !== null) {
       const event = JSON.parse(msg.content.toString())
-      const prevStateEs = traducirEstado(event.prevState)
-      const newStateEs = traducirEstado(event.newState)
-      await pool.query(
-        'INSERT INTO complaint_events (complaint_id, description, prev_state, new_state, change_date) VALUES ($1, $2, $3, $4, $5)',
-        [event.complaintId, event.description, prevStateEs, newStateEs, event.change_date]
-      )
-      channel.ack(msg) // Borra el mensaje de la cola
+      await guardarMensajeEnBD(event)
+      await limpiarCola(channel)
       console.log('Evento guardado:', event)
+      // No se borra el mensaje con ack
     }
-  })
+  }, { noAck: true })
 }
 
 // 2. Endpoint para obtener todos los registros
