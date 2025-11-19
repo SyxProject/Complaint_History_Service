@@ -9,20 +9,6 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
 const QUEUE = 'status-queque'
 
-// Traducción de estados
-function traducirEstado(estado) {
-  switch (estado) {
-    case 'OPEN':
-      return 'Abierta'
-    case 'CLOSED':
-      return 'Cerrada'
-    case 'UNDER_REVIEW':
-      return 'En revisión'
-    default:
-      return estado
-  }
-}
-
 // 1. Consumidor de RabbitMQ
 async function startConsumer() {
   const conn = await amqp.connect(process.env.RABBITMQ_URL)
@@ -36,19 +22,16 @@ async function startConsumer() {
   channel.consume(QUEUE, async (msg) => {
     if (msg !== null) {
       const event = JSON.parse(msg.content.toString())
-      await guardarMensajeEnBD(event)
-      await limpiarCola(channel)
-      console.log('Evento guardado:', event)
-      // No se borra el mensaje con ack
+      await pool.query(
+        'INSERT INTO history.complaint_history (complaint_id, description ,prev_state, new_state, change_date) VALUES ($1, $2, $3, $4, $5)',
+        [event.complaintId, event.description, event.prevState, event.newState, event.changeDate]
+      )
+      channel.ack(msg) // Borra el mensaje de la cola
+      console.log('[',new Date().toLocaleString(),']: Evento consumido y almacenado en la base de datos.')
+      console.log('Mensaje del evento:', event)
     }
-  }, { noAck: true })
+  })
 }
-
-// 2. Endpoint para obtener todos los registros
-app.get('/events', async (req, res) => {
-  const result = await pool.query('SELECT * FROM complaint_events ORDER BY timestamp DESC')
-  res.json(result.rows)
-})
 
 // 3. Inicia el microservicio y el consumidor
 app.listen(port, () => {
